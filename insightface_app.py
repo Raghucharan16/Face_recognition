@@ -1,46 +1,80 @@
+import os
 import cv2
-import insightface
 import numpy as np
+import insightface
 from insightface.app import FaceAnalysis
+import faiss
 
-# Initialize face analysis model
-app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])  # Use 'CUDAExecutionProvider' for GPU
-app.prepare(ctx_id=-1)  # ctx_id=-1 for CPU, 0 for GPU
+# Initialize InsightFace
+app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
+app.prepare(ctx_id=-1)  # Use CPU
 
-def get_face_embedding(image_path):
-    """Extract face embedding from an image"""
-    img = cv2.imread(image_path)
+# Initialize FAISS index for cosine similarity
+dimension = 512  # Dimension of face embeddings (buffalo_l model)
+index = faiss.IndexFlatIP(dimension)  # Inner product for cosine similarity
+
+# Dictionary to map index to face metadata
+face_database = {}
+
+def normalize_embedding(embedding):
+    """Normalize embedding to unit length for cosine similarity"""
+    return embedding / np.linalg.norm(embedding)
+
+def register_faces(image_folder):
+    """Register all faces from a folder into the vector database"""
+    for filename in os.listdir(image_folder):
+        if filename.endswith(('.jpg', '.png', '.jpeg')):
+            image_path = os.path.join(image_folder, filename)
+            img = cv2.imread(image_path)
+            if img is None:
+                print(f"Could not read image: {image_path}")
+                continue
+            
+            # Detect faces
+            faces = app.get(img)
+            if len(faces) < 1:
+                print(f"No faces detected in {filename}")
+                continue
+            
+            # Use the first detected face
+            embedding = normalize_embedding(faces[0].embedding)
+            face_id = len(face_database)  # Assign a unique ID
+            face_database[face_id] = {"name": filename, "embedding": embedding}
+            
+            # Add normalized embedding to FAISS index
+            index.add(np.array([embedding]))
+            print(f"Registered {filename} with ID {face_id}")
+
+def search_face(input_image_path, threshold=0.6):
+    """Search for a face in the database using cosine similarity"""
+    img = cv2.imread(input_image_path)
     if img is None:
-        raise ValueError(f"Could not read image: {image_path}")
+        raise ValueError(f"Could not read image: {input_image_path}")
     
+    # Detect faces in the input image
     faces = app.get(img)
-    
     if len(faces) < 1:
-        raise ValueError("No faces detected in the image")
-    if len(faces) > 1:
-        print("Warning: Multiple faces detected. Using first detected face")
+        raise ValueError("No faces detected in the input image")
     
-    return faces[0].embedding
+    # Use the first detected face
+    query_embedding = normalize_embedding(faces[0].embedding)
+    
+    # Perform 1:N search in FAISS
+    similarities, indices = index.search(np.array([query_embedding]), k=1)
+    
+    # Check if the closest match is within the threshold
+    if similarities[0][0] > threshold:
+        matched_id = indices[0][0]
+        matched_face = face_database[matched_id]
+        print(f"Match found! ID: {matched_id}, Name: {matched_face['name']}, Similarity: {similarities[0][0]:.4f}")
+    else:
+        print("No match found.")
 
-def compare_faces(emb1, emb2, threshold=0.6):
-    """Compare two embeddings using cosine similarity"""
-    similarity = np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
-    return similarity, similarity > threshold
+registered_faces_folder = "C:/Users/N.VenkataRaghuCharan/Documents/facedb"  # Folder with registered face images
+input_image_path = "tharun4.jpg" 
 
-# Paths to your Indian face images
-image1_path = "image_path1.jpg"
-image2_path = "image_path2.jpg"
+# Register faces
+register_faces(registered_faces_folder)
 
-try:
-    # Get embeddings
-    emb1 = get_face_embedding(image1_path)
-    emb2 = get_face_embedding(image2_path)
-    
-    # Compare faces
-    similarity_score, is_same_person = compare_faces(emb1, emb2)
-    
-    print(f"Similarity Score: {similarity_score:.4f}")
-    print(f"Same person? {'YES' if is_same_person else 'NO'}")
-    
-except Exception as e:
-    print(f"Error: {str(e)}")
+# Search for a face
+search_face(input_image_path, threshold=0.65)  # Set your desired threshold
