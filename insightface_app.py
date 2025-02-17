@@ -28,8 +28,8 @@ def compare_faces(emb1, emb2, threshold=0.6):
     return similarity, similarity > threshold
 
 # Paths to your Indian face images
-image1_path = "C:/Users/N.VenkataRaghuCharan/Documents/tharun2.jpg"
-image2_path = "C:/Users/N.VenkataRaghuCharan/Documents/tharun5.jpg"
+image1_path = "image_path1.jpg"
+image2_path = "image_path2.jpg"
 
 try:
     # Get embeddings
