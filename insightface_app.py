@@ -70,8 +70,8 @@ def search_face(input_image_path, threshold=0.6):
     else:
         print("No match found.")
 
-registered_faces_folder = "C:/Users/N.VenkataRaghuCharan/Documents/facedb"  # Folder with registered face images
-input_image_path = "tharun4.jpg" 
+registered_faces_folder = "folder path to register"  # Folder with registered face images
+input_image_path = "sample.jpg" 
 
 # Register faces
 register_faces(registered_faces_folder)
